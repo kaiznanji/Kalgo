@@ -7,9 +7,9 @@ name = "pypi"
 bs4 = "*"
 requests = "*"
 pandas = "*"
-joblib = "*"
+yfinance = "*"
 
 [dev-packages]
 
 [requires]
-python_version = "3.9"
+python_version = "3.8"
