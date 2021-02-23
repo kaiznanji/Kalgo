@@ -1,5 +1,5 @@
 # In this file we will check if each company's grant of stocks is part of a regularly scheduled event
-#  (incentive bonus, 10b5-1 plan, performance award, yearly grant etc)
+#  (incentive bonus, 10b5-1 plan, performance award, etc)
 
 # Import libraries
 import bs4 as bs
@@ -10,7 +10,7 @@ import re
 # A helper function that checks for key words that identify transaction as being scheduled
 def check(transaction_details):
     transaction_details = transaction_details.lower()
-    scheduled = ['incentive', 'performance', '10b5-1', 'annual']
+    scheduled = ['incentive', 'performance', '10b5-1']
     for word in scheduled:
         if word in transaction_details:
             return False

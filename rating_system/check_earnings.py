@@ -1,1 +1,0 @@
-# In this file we will check a companies upcoming earnings
