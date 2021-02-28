@@ -8,6 +8,10 @@ bs4 = "*"
 requests = "*"
 pandas = "*"
 yfinance = "*"
+vadersentiment = "*"
+selenium = "*"
+chromedriver-binary = "*"
+fake-useragent = "*"
 
 [dev-packages]
 

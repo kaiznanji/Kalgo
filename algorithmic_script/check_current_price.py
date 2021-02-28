@@ -3,6 +3,7 @@
 # Importing libraries
 import yfinance as yf
 import datetime as dt
+import re
 
 
 def is_stock_down(tick_cik):
@@ -10,7 +11,10 @@ def is_stock_down(tick_cik):
     for key in list(tick_cik):
         if (key == 'NONE'):
             del tick_cik[key]
-        
+
+        # Just in case we scrape a ticker wrong from the SEC we want to clean it 
+        key = re.sub("[^A-Z]+", ' ', key).upper()
+
         # This is for the edge case when there is trouble reading a ticker 
         start = dt.datetime(2021, 2, 11)
         end = dt.datetime(2021, 2, 13)

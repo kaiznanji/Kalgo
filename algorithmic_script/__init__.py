@@ -1,1 +1,1 @@
-# This file allows you to track files inside this directory from other directories
+from .algorithmic_script import algorithmic_script

@@ -1,1 +1,1 @@
-# This file allows you to track files inside this directory from other directories
+from .rating_system import rating_system

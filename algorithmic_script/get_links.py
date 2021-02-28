@@ -133,3 +133,5 @@ def get_date(soup):
     date = re.sub('\s+', "", date)
     date = dt.datetime.strptime(date, "%Y%m%d")
     return date
+
+

@@ -42,7 +42,7 @@ def scheduled(dictionary):
             bool_list.append(bool_value)
         if (not (False in bool_list)):
             transaction_details = re.sub('[^A-Za-z]+', ' ', transaction_details)
-            tickers[key.upper()] = [value[0], transaction_details, date]
+            tickers[key] = [value[0], transaction_details, date]
         
     return tickers
 

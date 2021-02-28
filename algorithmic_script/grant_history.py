@@ -88,7 +88,7 @@ def shady_past(tick_cik):
                         two_week_closing = yf.download(key, two_week_date, two_week_date + dt.timedelta(days=1))['Adj Close'].values[0]
                         roi = ((two_week_closing - recorded_closing)/recorded_closing) * 100
                         
-                        if (roi < 10):
+                        if (roi < 5):
                             del tick_cik[key]
 
                     elif (date < last_year):
