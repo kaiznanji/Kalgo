@@ -1,79 +1,55 @@
-# In this file we will check a companies upcoming earnings and recent news headlines through Seeking Alpha
+# In this file we will check a companies upcoming earnings and recent news headlines through Yahoo Finance
 
 # Import libraries
-import requests
 import datetime as dt
+import yfinance as yf
 import time
 from time import strptime
 from selenium import webdriver
-from selenium.webdriver.firefox.options import Options
+from selenium.webdriver.support.ui import WebDriverWait
+from selenium.webdriver.common.by import By
+from selenium.webdriver.support import expected_conditions as EC
 from vaderSentiment.vaderSentiment import SentimentIntensityAnalyzer
 import re
-
+from tqdm import tqdm
 
 # Main function
-def seekingalpha(tickers):
-
-    # Set options for Firefox Webdriver to avoid detection
-    options = Options()
-    options.binary_location = "/Applications/Firefox.app/Contents/MacOS/firefox"
-    options.headless = True
-    options.add_argument("window-size=1280,800")
-    options.add_argument("--enable-javascript")
-    options.add_argument("user-agent=Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/74.0.3729.169 Safari/537.36")    
-    options.add_argument('--disable-blink-features=AutomationControlled')
-
-    tickers = past_earnings(tickers, options)
-    tickers = news(tickers, options)
-
+def seekingalpha(tickers, gecko_path, seleniumOptions):
+    tickers = past_earnings(tickers, gecko_path, seleniumOptions)
+    print("|***** EARNINGS RATED *****|")
+    tickers = news(tickers, gecko_path, seleniumOptions)
+    print("|***** NEWS RATED *****|")
     return tickers
 
 
 # EARNINGS
 
 # RATINGS:
-#   0  -->  Earnings are far from now and EPS estimate is lower than last quarter
-#   1  -->  EPS is higher than last quarter or earnings are approaching (This is a good indicator if a company gives grants before earnings which we know from our script before)
+#   0  -->  Earnings are far from now
+#   1  -->  Earnings are approaching (This is a good indicator if a company gives grants before earnings which we know from our script before)
 
-def past_earnings(tickers, options):
-    for ticker in tickers:
-        url = 'https://seekingalpha.com/symbol/{}/earnings'.format(ticker)
+def past_earnings(tickers, gecko_path, options):
+    keys = list(tickers)
+    driver = webdriver.Firefox(executable_path=gecko_path, options=options)
 
-        driver = webdriver.Firefox(executable_path='/usr/local/bin/geckodriver', options=options)
+    for i in tqdm(range(len(keys))):
+        url = 'https://finance.yahoo.com/quote/{}'.format(keys[i])
         driver.get(url)
-        
-        upcoming_estimates = driver.find_element_by_id('upcoming-estimates')
-        past_estimates = driver.find_element_by_id('past-estimates')
 
-        if 'No estimates available' in upcoming_estimates.text:
+        earnings_date = WebDriverWait(driver, 20).until(EC.visibility_of_element_located((By.XPATH, "//td[@data-test='EARNINGS_DATE-value']")))
+        if ("N/A" in earnings_date.text):
             continue
+        else:
+            earnings_date = earnings_date.find_element_by_tag_name("span").text
 
-        time.sleep(2) # To mimic human browsing and avoid robot detection
+        month_number = dt.datetime.strptime(re.sub("[^A-Za-z]", "", earnings_date), "%b").month
+        date = re.sub("[^0-9,]", "", earnings_date)
+        earnings_date = dt.datetime.strptime(str(month_number) + "," + date, '%m,%d,%Y')
 
-        new_rows = upcoming_estimates.find_elements_by_class_name('row')
-
-        time.sleep(1) 
-
-        past_rows = past_estimates.find_elements_by_class_name('row')
-        date = new_rows[0].find_elements_by_tag_name('div')[-1].text
-
-        # If earnings date is not confirmed set it to be in far future (more than 3 weeks)
-        if 'Not confirmed' in date:
-            date = dt.datetime.now() + dt.timedelta(weeks=4)
-        else: 
-            date = date.split(" ")[0]
-            date = dt.datetime.strptime(date, '%m/%d/%Y')
+        if ((dt.datetime.now() + dt.timedelta(weeks=3)) > earnings_date > dt.datetime.now()):
+            tickers[keys[i]] += 1
         
-        eps_estimate = new_rows[1].find_elements_by_tag_name('div')[-1].text.split('$')[1]
-
-        time.sleep(1)
-
-        past_eps_estimate = past_rows[1].find_elements_by_tag_name('div')[-1].text.split('$')[1]
-
-        if (((dt.datetime.now() + dt.timedelta(weeks=3)) > date) or (float(eps_estimate) >= float(past_eps_estimate))):
-            tickers[ticker] += 1
-        
-        driver.quit()
+    driver.quit()
 
     return tickers
         
@@ -81,80 +57,54 @@ def past_earnings(tickers, options):
 # NEWS
 
 # RATINGS:
-#   0  -->  Negative sentiment in recent press releases and no signal for upcoming conferences to discuss potential good news
-#   1  -->  Positive sentiment in recent press releases and no signal for upcoming conferences to discuss potential good news 
-#   1  -->  Negative sentiment in recent press releases and signals for upcoming conferences to discuss potential good news
-#   2  -->  Positive sentiment in recent press releases and signals for upcoming conferences to discuss potential good news
+#   0  -->  No signal for upcoming conferences to discuss potential good news
+#   1  -->  Signal for upcoming conferences to discuss potential good news 
 
-
-def news(tickers, options):
+def news(tickers, gecko_path, options):
     main_url  = 'https://seekingalpha.com'
+    keys = list(tickers)
+    driver = webdriver.Firefox(executable_path=gecko_path, options=options)
+
+    for i in tqdm(range(len(keys))):
+        link = 'https://finance.yahoo.com/quote/{}'.format(keys[i])
     
-    for ticker in tickers:
-        run_once = 0
-        sentiment_score = 0
-        company = get_company(ticker).lower()
-        words = ['company', ticker, company, company.split()[0]]
-        link = 'https://seekingalpha.com/symbol/{}/press-releases'.format(ticker)
-    
-        driver = webdriver.Firefox(executable_path='/usr/local/bin/geckodriver', options=options)
         driver.get(link)
+        titles = WebDriverWait(driver, 20).until(EC.presence_of_all_elements_located((By.XPATH, "//h3[@class='Mb(5px)']")))
+        dates = WebDriverWait(driver, 20).until(EC.presence_of_all_elements_located((By.XPATH, "//div[@class='C(#959595) Fz(11px) D(ib) Mb(6px)']")))
 
-        time.sleep(2)
-        
-        # Find the past 7 articles to analyze
-        for article in driver.find_elements_by_css_selector("article[data-test-id='post-list-item']")[:7]:
+        # Find the past 5 articles to analyze
+        for title, date in zip(titles[:5], dates[:5]): 
+            span_tags = date.find_elements_by_tag_name("span")
+            if (len(span_tags) != 2):
+                date = ""
+            else:
+                date = span_tags[-1].text
 
-            time.sleep(3) # To mimic human browsing and avoid robot detection
+            if ("hour" in date):
+                article_date = dt.datetime.now()
+            elif ("day" in date):
+                number_of_days = re.sub("[^0-9]", "", date)
+                if (number_of_days == ""): # Edge case for when article is yesterday
+                    article_date = dt.datetime.now() - dt.timedelta(days=1)
+                else:
+                    article_date = dt.datetime.now() - dt.timedelta(days=int(number_of_days))
+            elif ("month" in date):
+                number_of_months = re.sub("[^0-9]", "", date)
+                if (number_of_months == ""): # Edge case for when article is last month
+                    article_date = dt.datetime.now() - dt.timedelta(weeks=4)
+                else:
+                    article_date = dt.datetime.now() - dt.timedelta(weeks=int(number_of_months)*4)
+            else:
+                article_date = dt.datetime.now() - - dt.timedelta(weeks=52)
 
-            texts = ''
-            date = article.find_element_by_css_selector("span[data-test-id='post-list-date']").text
+            title = title.text.lower()
 
-            time.sleep(1)
+            three_weeks_ago = dt.datetime.now() - dt.timedelta(weeks=3)
+            if (article_date >= three_weeks_ago and ('conference' in title or 'meeting' in title)):
+                tickers[keys[i]] += 1
+                break
 
-            date = get_date(date)
-
-            time.sleep(1)
-
-            link = article.find_element_by_tag_name('a').get_attribute('href')
-            driver2 = webdriver.Firefox(executable_path='/usr/local/bin/geckodriver', options=options)
-            driver2.get(link)
-            content = driver2.find_element_by_id('pr-body')
-            
-            for paragraph in content.find_elements_by_tag_name('p'):
-                if (len(paragraph.text.split()) < 10):
-                    continue
-                paragraph = re.sub("[^A-Za-z]+", ' ', paragraph.text).lower()
-                paragraph = re.sub(r'\b\w{1,3}\b', '', paragraph)
-                count = 0
-    
-                # Check if there is any signal for upcoming conferences
-                if (run_once == 0):
-                    three_weeks_ago = dt.datetime.now() - dt.timedelta(weeks=3)
-                    if (date >= three_weeks_ago):
-                        if ('conference' in paragraph):
-                            count += 1
-                        for word in words:
-                            if (word in paragraph):
-                                count += 1
-                                break
-
-                if (count == 2):
-                    run_once = 1
-                    tickers[ticker] += 1 
-
-                texts += paragraph
-
-            driver2.quit()
-            sentiment_score += get_sentiment(texts) 
-            
-        driver.quit()
-
-        # Check if sentiment of past 7 articles is overall positive
-        print(ticker + ': ' + str(sentiment_score))
-        if (sentiment_score > 0):
-            tickers[ticker] += 1 
-
+    driver.quit()
     return tickers
             
 
@@ -163,7 +113,7 @@ def get_sentiment(text):
     analyser = SentimentIntensityAnalyzer()
     score = analyser.polarity_scores(text)
     sentiment = score['compound']
-    if (sentiment >= 0.05):
+    if (sentiment >= 0.50):
         return 1  
     elif ((sentiment > -0.50) and (sentiment < 0.50)):
         return 0
@@ -189,9 +139,10 @@ def get_date(date):
 
 # A helper function that grabs a company name given a ticker
 def get_company(symbol):
-    url = "http://d.yimg.com/autoc.finance.yahoo.com/autoc?query={}&region=1&lang=en".format(symbol)
-    result = requests.get(url).json()
-
-    for x in result['ResultSet']['Result']:
-        if x['symbol'] == symbol:
-            return x['name']
+    try:
+        tickerInfo = yf.Ticker(symbol)
+        company_name = tickerInfo.info['longName']
+        return company_name
+    except:
+        return ""
+    

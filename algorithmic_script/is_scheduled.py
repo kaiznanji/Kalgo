@@ -18,15 +18,14 @@ def check(transaction_details):
 
 
 # A helper function to get the transaction details
-def get_recent_message_date(link):
+def get_recent_message(link):
     transaction_details = ''
-    resp = requests.get(link)
+    resp = requests.get(link, headers={'User-Agent': 'Spaced Out kaiznanji@spacedout.com', 'Accept-Encoding': 'gzip', 'Host': 'www.sec.gov'})
     soup = bs.BeautifulSoup(resp.text, 'html.parser')
-    footers = soup.find_all('footnote')
-    date = soup.find('periodofreport').text
+    footers = soup.find_all("footnote")
     for footer in footers:
         transaction_details += ' ' + footer.text
-    return transaction_details, date
+    return transaction_details
 
         
 # This function checks if any of the form 4 filings are a part of incentive
@@ -36,13 +35,12 @@ def scheduled(dictionary):
     for key,value in dictionary.items():
         bool_list = []
         for link in value[1]:
-            transaction_details = get_recent_message_date(link)[0]
-            date = get_recent_message_date(link)[1]
+            transaction_details = get_recent_message(link)
             bool_value = check(transaction_details)            
             bool_list.append(bool_value)
         if (not (False in bool_list)):
             transaction_details = re.sub('[^A-Za-z]+', ' ', transaction_details)
-            tickers[key] = [value[0], transaction_details, date]
+            tickers[key] = [value[0], transaction_details]
         
     return tickers
 

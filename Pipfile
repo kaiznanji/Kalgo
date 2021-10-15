@@ -4,16 +4,15 @@ verify_ssl = true
 name = "pypi"
 
 [packages]
-bs4 = "*"
 requests = "*"
-pandas = "*"
-yfinance = "*"
+bs4 = "*"
 vadersentiment = "*"
-selenium = "*"
-chromedriver-binary = "*"
-fake-useragent = "*"
+yfinance = "*"
+tqdm = "*"
+selenium = "~=3.14"
 
 [dev-packages]
+autopep8 = "*"
 
 [requires]
 python_version = "3.8"

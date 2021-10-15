@@ -4,52 +4,77 @@
 # Importing libraries
 import bs4 as bs
 import requests
+from selenium import webdriver
+from selenium.webdriver.support.ui import WebDriverWait
+from selenium.webdriver.common.by import By
+from selenium.webdriver.support import expected_conditions as EC
 import string
 import datetime as dt
 import re
+import time
+from tqdm import tqdm
 
 
 # Get the recent form 4 issuer links with at least 3 insider trades in the past day
-def get_all_links():
-    main_url = 'https://www.sec.gov'
+def get_all_links(gecko_path, options):
+    # Initializing variables
     url = 'https://www.sec.gov/cgi-bin/current?q1=1&q2=0&q3=4'
     filing_links = {}
-    count = 1
-    resp = requests.get(url)
-    soup = bs.BeautifulSoup(resp.text, 'html.parser')
-    main_date = get_date(soup)
-    filings = soup.find('pre')
-    filings = filings.find_all('a')
-    last_form = filings[0]
-    last_CIK = filings[1]
     company_links = []
-    form_link = get_form_link(main_url + last_form['href'])
+    count = 1
+
+    driver = webdriver.Firefox(executable_path=gecko_path, options=options)
+    driver.get(url)
+    main_date = get_date(driver)
+    filings = WebDriverWait(driver, 20).until(EC.visibility_of_element_located((By.TAG_NAME, "pre")))
+    filings = WebDriverWait(driver, 20).until(EC.presence_of_all_elements_located((By.TAG_NAME, "a")))
+    forms = filings[2:][0::2]
+    ciks = filings[2:][1::2]
+
+    # Delete "Perform another current events analysis?" in forms array
+    del forms[-1]
+
+    last_CIK = filings[1].text
+    form_link = get_form_link(filings[0].get_attribute('href'), last_CIK)
     company_links.append(form_link)
-       
+    array_size = range(len(forms))
+
     # Iterate through every two values to get each companies CIK and form type
-    for form, CIK in zip(filings[2:][0::2], filings[2:][1::2]):
-        is_in_range = check_actual_file_date(main_url + form['href'], main_date)
-        if ((CIK.text == last_CIK.text) and (form.text == '4') and is_in_range):
+    for i in tqdm(array_size):
+        form = forms[i]
+        formHref = form.get_attribute('href')
+        CIK = ciks[i].text
+
+        # This line causes the program to take a while longer to run so it is commented out for now until optimized
+        #is_in_range = check_actual_file_date(formHref, main_date, gecko_path, options)
+
+        if ((CIK == last_CIK) and (form.text == '4')):
             count += 1
-            form_link = get_form_link(main_url + form['href'])
+            form_link = get_form_link(formHref, CIK)
             company_links.append(form_link)
     
         else:
             if (count >= 3):
-                ticker = get_ticker(company_links[0])
                 are_they_acquired = acquired(company_links)
 
                 if (are_they_acquired):
-                    filing_links[ticker] = [last_CIK.text, company_links]
+                    ticker = get_ticker(company_links[0])
+                    filing_links[ticker] = [last_CIK, company_links]
 
             count = 1
             company_links = []
-            form_link = get_form_link(main_url + form['href'])
+            form_link = get_form_link(formHref, CIK)
             company_links.append(form_link)
-        last_form = form
         last_CIK = CIK
-    
-    print("|***** LINKS CREATED *****|")
+
+    # To account for last set of companies
+    if (count >= 3):
+            ticker = get_ticker(company_links[0])
+            are_they_acquired = acquired(company_links)
+
+            if (are_they_acquired):
+                filing_links[ticker] = [CIK, company_links]
+    driver.quit()
     return filing_links
     
 
@@ -58,7 +83,7 @@ def acquired(links):
     acquiredCount = 0
     disposedCount = 0
     for link in links:
-        resp = requests.get(link)
+        resp = requests.get(link, headers={'User-Agent': 'Spaced Out kaiznanji@spacedout.com', 'Accept-Encoding': 'gzip', 'Host': 'www.sec.gov'})
         soup = bs.BeautifulSoup(resp.text, 'html.parser')
         code = soup.find_all('transactionacquireddisposedcode')
         for i in code:
@@ -68,7 +93,7 @@ def acquired(links):
                 acquiredCount += 1
             elif (i == "D"):
                 disposedCount += 1
-    
+            
     # Ensure all insiders are acquiring stock 
     if (disposedCount == 0 and acquiredCount > 0):
         return True
@@ -78,32 +103,34 @@ def acquired(links):
 
 # A helper function to get the ticker for a company 
 def get_ticker(link):
-    resp = requests.get(link)
+    resp = requests.get(link, headers={'User-Agent': 'Spaced Out kaiznanji@spacedout.com', 'Accept-Encoding': 'gzip', 'Host': 'www.sec.gov'})
     soup = bs.BeautifulSoup(resp.text, 'html.parser')
-    ticker = soup.find('issuertradingsymbol')
-    ticker = ticker.text
-    return ticker
+    ticker = soup.find("issuertradingsymbol")
+    if (ticker is None):
+        return "INVALID"
+    else:
+        ticker = ticker.text
+        return ticker
 
 
 # A helper function to scrape the form 4 page and get txt file link to parse later on
-def get_form_link(link):
-    resp = requests.get(link)
-    soup = bs.BeautifulSoup(resp.text, 'html.parser')
-    table = soup.find('table', {'class' : 'tableFile'})
-    last_row = table.find_all('tr')[-1]
-    link = 'https://www.sec.gov/' + last_row.find('a').get('href')
-    return link
- 
+def get_form_link(link, cik):
+    number = link.split("-index")[0].rsplit('/', 1)[1]
+    number_without_dashes = re.sub("[^0-9]", "", number)
+    txt_link = "https://www.sec.gov/Archives/edgar/data/" + cik + "/" + number_without_dashes + "/" + number + ".txt"
+    return txt_link
+    
  
 # A helper function to check the actual filing date to make sure
 #  we can still get in before news comes out (4 days)
-def check_actual_file_date(link, main_date):
-    resp = requests.get(link)
-    soup = bs.BeautifulSoup(resp.text, 'html.parser')
-    formContent = soup.find('div', {'class' : 'formContent'})
-    recent_date = formContent.find_all('div', {'class' : 'formGrouping'})[-1]
-    recent_date = recent_date.find('div', {'class' : 'info'}).text
+def check_actual_file_date(link, main_date, gecko_path, options):
+    driver = webdriver.Firefox(executable_path=gecko_path, options=options)
+    driver.get(link)
+    formContent = WebDriverWait(driver, 20).until(EC.visibility_of_element_located((By.XPATH, "//div[@class='formContent']")))
+    recent_date = formContent.find_elements_by_xpath("//div[@class='formGrouping']")[-1]
+    recent_date = recent_date.find_element_by_xpath("//div[@class='info']").text
     recent_date = dt.datetime.strptime(recent_date, '%Y-%m-%d') 
+    driver.quit()
     return check_date_range(main_date, recent_date, 4)
 
 
@@ -125,8 +152,8 @@ def check_date_range(main_date, date, range):
 
 
 # A helper function to get the main date of the filings
-def get_date(soup):
-    header = soup.find('p')
+def get_date(driver):
+    header = WebDriverWait(driver, 20).until(EC.visibility_of_element_located((By.TAG_NAME, "p")))
     date = header.text.partition('\n')[0].lower()
     date = date.split("is")[0]
     date = re.sub("[^0-9]", "", date)
