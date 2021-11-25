@@ -17,8 +17,8 @@ import re
 from tqdm import tqdm
 
 # Import functions from other files
-from algorithmic_script.get_links import get_form_link
-from algorithmic_script.is_scheduled import get_recent_message
+from elimination_system.get_links import get_form_link
+from elimination_system.is_scheduled import get_recent_message
 
 # RATINGS:
 #   0  -->  There are zero to one cases when a company gives grants their stock price shoots up
@@ -56,13 +56,11 @@ def shady_past(tickers, values, gecko_path, options):
             row_pos = 0
 
             # Loop through values to start at a month ago(so we can check if stock went up)
-            while (page_number == 0 and last_month < dt.datetime.strptime(last_row_contents[1].text, '%Y-%m-%d')):
+            while (row_pos < len(rows)-1 and last_row_contents[1].text != "-" and last_month < dt.datetime.strptime(last_row_contents[1].text, '%Y-%m-%d')):
                 row_pos += 1
+                
+                # Initializing last row content into variables to allow comparison in loop only on first page so we can track count through page switches
                 last_row_contents = rows[row_pos].find_elements_by_tag_name('td')
-
-            # Initializing last row content into variables to allow comparison in loop only on first page
-            #  so we can track count through page switches
-            if (page_number == 0):
                 last_acqusition_value = last_row_contents[0].text
                 last_date = last_row_contents[1].text
                 last_form_link = last_row_contents[4].find_element_by_tag_name('a').get_attribute('href')
