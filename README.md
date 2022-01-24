@@ -1,2 +1,2 @@
 # Kalgo
-in progress insane algorithm that will make you bank
+In progress algorithmn that'll make you bank
