@@ -1,2 +1,2 @@
 # Kalgo
-In progress algorithm that will make you bank
+In progress algorithmic stock bot
